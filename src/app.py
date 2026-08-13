@@ -10,6 +10,7 @@ Jobs are held in a dictionary in memory. There is no database because nothing
 here needs to outlive the process: a job is a temporary artefact of one upload.
 """
 
+import os
 import shutil
 import threading
 import traceback
@@ -35,7 +36,14 @@ TEMPLATES = Jinja2Templates(directory=str(ROOT / "templates"))
 # ever one redaction implementation to maintain.
 TEXT_SUFFIXES = {".txt", ".md", ".text", ".log", ".csv"}
 DOCX_SUFFIXES = {".docx"}
-MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+# Sized for a 512 MB free-tier container, not for what the pipeline can parse
+# locally. A 2 MB .docx expands to a ~12 MB document.xml, and lxml holds that
+# as a tree of roughly 200 MB - on top of ~150 MB for the loaded spaCy model.
+# A larger cap does not fail politely; the container is OOM-killed mid-job and
+# the user sees the connection drop.
+#
+# Raise this when running locally or on an instance with more memory.
+MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_MB", "8")) * 1024 * 1024
 
 app = FastAPI(title="SecureRedact")
 app.mount("/static", StaticFiles(directory=str(ROOT / "static")), name="static")
@@ -164,6 +172,30 @@ def _build_report(job_id: str, result, gt_path: Optional[Path]) -> str:
     return "\n".join(lines)
 
 
+def _save_within_limit(source, destination: Path) -> None:
+    """Stream an upload to disk, aborting as soon as it exceeds the limit.
+
+    Checking the size after writing would mean a large upload is fully written
+    before being rejected, which on a small container is exactly the memory and
+    disk pressure the limit exists to prevent.
+    """
+    written = 0
+    try:
+        with destination.open("wb") as fh:
+            while chunk := source.read(1024 * 1024):
+                written += len(chunk)
+                if written > MAX_UPLOAD_BYTES:
+                    raise HTTPException(
+                        400,
+                        f"File exceeds the "
+                        f"{MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit.",
+                    )
+                fh.write(chunk)
+    except HTTPException:
+        destination.unlink(missing_ok=True)
+        raise
+
+
 def _start_job(job_dir: Path, docx_path: Path, display_name: str,
                gt_path: Optional[Path]) -> str:
     job_id = job_dir.name
@@ -222,11 +254,7 @@ async def start_redaction(
             )
 
         raw_path = job_dir / document.filename
-        with raw_path.open("wb") as fh:
-            shutil.copyfileobj(document.file, fh)
-
-        if raw_path.stat().st_size > MAX_UPLOAD_BYTES:
-            raise HTTPException(400, "File exceeds the 50 MB limit.")
+        _save_within_limit(document.file, raw_path)
 
         if suffix in TEXT_SUFFIXES:
             # Convert to DOCX so a single pipeline handles every input, and so

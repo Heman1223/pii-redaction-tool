@@ -1,0 +1,40 @@
+# Render Blueprint - deploys the whole app as ONE public service.
+#
+# The FastAPI app serves the HTML UI, the static assets and the JSON API from a
+# single process, so there is exactly one URL for a reviewer to open. No
+# separate frontend service, no CORS, no authentication.
+
+services:
+  - type: web
+    name: secureredact
+    runtime: python
+    plan: free
+    region: oregon
+
+    # The spaCy model is not a normal PyPI package, so it is downloaded as a
+    # separate build step. Without this the app imports fine but fails on the
+    # first request with "Can't find model 'en_core_web_sm'".
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
+      python -m spacy download en_core_web_sm
+
+    # Render injects $PORT and routes to it. Binding 127.0.0.1 would make the
+    # service unreachable and fail the health check.
+    startCommand: uvicorn src.app:app --host 0.0.0.0 --port $PORT --workers 1
+
+    # MUST stay at a single instance and a single worker.
+    #
+    # Job state lives in an in-memory dict (src/app.py: JOBS). With more than
+    # one process, the browser polling /api/jobs/{id} would round-robin onto a
+    # process that never ran that job and get a 404 mid-progress.
+    numInstances: 1
+
+    healthCheckPath: /
+
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      # Keeps the build slim; nothing here needs a pip cache at runtime.
+      - key: PIP_NO_CACHE_DIR
+        value: "1"
