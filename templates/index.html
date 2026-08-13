@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}Upload Document &mdash; SecureRedact{% endblock %}
+
+{% block content %}
+<div class="stack-center">
+  <div class="page-head">
+    <h1>Upload Document</h1>
+    <p class="lede">Securely redact <span class="accent">PII</span> from your documents.</p>
+  </div>
+
+  <form class="panel" id="form" action="/redact" method="post" enctype="multipart/form-data">
+
+    <div class="tabs" role="tablist">
+      <button type="button" class="tab active" data-tab="file" role="tab">Upload file</button>
+      <button type="button" class="tab" data-tab="text" role="tab">Paste text</button>
+    </div>
+
+    <!-- ---------------- File tab ---------------- -->
+    <div class="tab-panel active" data-panel="file">
+      <label class="dropzone" id="dropzone" for="file-input">
+        <input type="file" id="file-input" name="document" accept=".docx,.txt,.md,.csv,.log" hidden>
+
+        <span class="dz-icon">
+          <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Zm-1 7V3.5L18.5 9H13Zm-1 3 3 3h-2v4h-2v-4H8l3-3Z"/></svg>
+        </span>
+
+        <span class="dz-title" id="dz-title">Drag &amp; drop your file here</span>
+        <span class="dz-sub" id="dz-sub">or <span class="link">browse files</span></span>
+        <span class="dz-hint">Supported: .docx, .txt, .md, .csv &mdash; up to 50&nbsp;MB</span>
+      </label>
+    </div>
+
+    <!-- ---------------- Text tab ---------------- -->
+    <div class="tab-panel" data-panel="text">
+      <textarea
+        name="pasted_text"
+        id="pasted-text"
+        class="textarea"
+        rows="10"
+        placeholder="Paste text containing personal information, for example:&#10;&#10;Contact Rashi Patil at rashhi.patil@gmail.com or +91 9876543210.&#10;SSN: 123-45-6789. Card: 4111 1111 1111 1111."></textarea>
+      <p class="dz-hint">The redacted result is always returned as a <b>.docx</b> file.</p>
+    </div>
+
+    <!-- ---------------- Optional scoring ---------------- -->
+    <details class="advanced">
+      <summary>Score this run against ground truth <span class="pill">optional</span></summary>
+      <label class="field">
+        <span class="field-label">Ground-truth annotations (.json)</span>
+        <input type="file" name="ground_truth" accept=".json" class="file-plain">
+        <span class="dz-hint">
+          A list of <code>{"text": "...", "type": "..."}</code> objects. Without it
+          the tool still reports everything it found, but precision and recall
+          are undefined &mdash; there is nothing to compare against.
+        </span>
+      </label>
+    </details>
+
+    <div class="panel-foot">
+      <button type="submit" class="btn primary" id="submit-btn" disabled>
+        <svg class="btn-ico" viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Zm-1 14-4-4 1.4-1.4L11 13.2l4.6-4.6L17 10l-6 6Z"/></svg>
+        Scan &amp; Redact
+      </button>
+    </div>
+  </form>
+
+  <section class="capabilities">
+    <h2>What gets detected</h2>
+    <ul class="cap-grid">
+      <li><b>Names</b><span>NER + context rules</span></li>
+      <li><b>Emails</b><span>pattern</span></li>
+      <li><b>Phone numbers</b><span>pattern</span></li>
+      <li><b>Companies</b><span>NER + legal suffix</span></li>
+      <li><b>Addresses</b><span>postcode, multi-line</span></li>
+      <li><b>SSNs</b><span>pattern + context</span></li>
+      <li><b>Credit cards</b><span>pattern + Luhn</span></li>
+      <li><b>Dates of birth</b><span>context-gated</span></li>
+      <li><b>IP addresses</b><span>pattern + range</span></li>
+    </ul>
+    <p class="foot-note">
+      Embedded images can hide identity documents that no text rule can read, so
+      every image is neutralised rather than assumed safe.
+    </p>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const fileInput = document.getElementById('file-input');
+const dropzone  = document.getElementById('dropzone');
+const dzTitle   = document.getElementById('dz-title');
+const dzSub     = document.getElementById('dz-sub');
+const textArea  = document.getElementById('pasted-text');
+const submitBtn = document.getElementById('submit-btn');
+
+let activeTab = 'file';
+
+/* ---- Tabs ---- */
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    activeTab = tab.dataset.tab;
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === tab));
+    document.querySelectorAll('.tab-panel').forEach(p =>
+      p.classList.toggle('active', p.dataset.panel === activeTab));
+    refreshSubmit();
+  });
+});
+
+/* ---- Enable submit only when there is something to send ---- */
+function refreshSubmit() {
+  const ready = activeTab === 'file'
+    ? fileInput.files.length > 0
+    : textArea.value.trim().length > 0;
+  submitBtn.disabled = !ready;
+}
+
+function showFile(name) {
+  dzTitle.textContent = name;
+  dzSub.innerHTML = '<span class="link">Choose a different file</span>';
+  dropzone.classList.add('has-file');
+}
+
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length) showFile(fileInput.files[0].name);
+  refreshSubmit();
+});
+textArea.addEventListener('input', refreshSubmit);
+
+/* ---- Drag & drop ---- */
+['dragenter', 'dragover'].forEach(evt =>
+  dropzone.addEventListener(evt, e => {
+    e.preventDefault();
+    dropzone.classList.add('dragging');
+  }));
+
+['dragleave', 'drop'].forEach(evt =>
+  dropzone.addEventListener(evt, e => {
+    e.preventDefault();
+    dropzone.classList.remove('dragging');
+  }));
+
+dropzone.addEventListener('drop', e => {
+  const files = e.dataTransfer.files;
+  if (files.length) {
+    fileInput.files = files;
+    showFile(files[0].name);
+    refreshSubmit();
+  }
+});
+
+/* ---- Only submit the field belonging to the active tab ---- */
+document.getElementById('form').addEventListener('submit', () => {
+  if (activeTab === 'file') textArea.value = '';
+  else fileInput.value = '';
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Uploading…';
+});
+</script>
+{% endblock %}

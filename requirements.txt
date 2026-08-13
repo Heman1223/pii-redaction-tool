@@ -1,0 +1,17 @@
+# --- Core pipeline --------------------------------------------------------
+python-docx==1.1.2      # read/write DOCX: paragraphs, tables, headers, images
+spacy==3.8.7            # NER for PERSON / ORG (names cannot be regexed reliably)
+Faker==37.1.0           # type-compatible realistic replacement values
+
+# --- Web app (upload -> redact -> download) -------------------------------
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20  # required by FastAPI to parse file uploads
+jinja2==3.1.5             # server-rendered templates
+
+# --- Tests ----------------------------------------------------------------
+pytest==8.3.5
+
+# The spaCy English model is not installable as a normal PyPI dependency.
+# Install it separately after the above:
+#     python -m spacy download en_core_web_sm

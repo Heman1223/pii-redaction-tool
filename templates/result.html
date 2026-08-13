@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+{% block title %}Redaction Results &mdash; SecureRedact{% endblock %}
+
+{% block content %}
+
+<!-- ======================= Processing ======================= -->
+<section class="stack-center" id="processing-view">
+  <div class="panel processing">
+    <span class="dz-icon pulse">
+      <svg viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z"/></svg>
+    </span>
+
+    <h1 class="proc-title">Detecting and Redacting PII…</h1>
+    <p class="lede">Please wait while we scan your document for sensitive information.</p>
+
+    <div class="progress-block">
+      <div class="progress-head">
+        <span class="progress-label" id="stage-label">Starting</span>
+        <span class="progress-pct" id="stage-pct">0%</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+    </div>
+
+    <div class="file-chip">
+      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Zm-1 7V3.5L18.5 9H13Z"/></svg>
+      <span>{{ job.filename }}</span>
+    </div>
+
+    <button class="btn-link danger" id="cancel-btn" type="button">Cancel Processing</button>
+  </div>
+</section>
+
+<!-- ======================= Error / cancelled ======================= -->
+<section class="stack-center hidden" id="error-view">
+  <div class="panel">
+    <h1 class="proc-title" id="error-title">Something went wrong</h1>
+    <pre class="error-box" id="error-text"></pre>
+    <a class="btn" href="/">Start over</a>
+  </div>
+</section>
+
+<!-- ======================= Results ======================= -->
+<section class="hidden" id="results-view">
+
+  <div class="results-head">
+    <div>
+      <h1>Redaction Results</h1>
+      <p class="lede">Review the summary and performance metrics for your recent redaction job.</p>
+    </div>
+    <div class="results-actions">
+      <a class="btn primary" id="dl-docx">
+        <svg class="btn-ico" viewBox="0 0 24 24"><path d="M12 16l-5-5h3V4h4v7h3l-5 5Zm-7 2h14v2H5v-2Z"/></svg>
+        Download Redacted DOCX
+      </a>
+      <a class="btn ghost" id="dl-report">Evaluation report</a>
+    </div>
+  </div>
+
+  <div class="summary-bar">
+    <div class="summary-cell">
+      <span class="cell-key">Filename</span>
+      <span class="cell-val with-ico">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Zm-1 7V3.5L18.5 9H13Z"/></svg>
+        <b id="sum-filename">{{ job.filename }}</b>
+      </span>
+    </div>
+    <div class="summary-cell">
+      <span class="cell-key">Status</span>
+      <span class="cell-val status-ok">
+        <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm-1 14.4-4-4L8.4 11l2.6 2.6L15.6 9 17 10.4l-6 6Z"/></svg>
+        <b>Complete</b>
+      </span>
+    </div>
+    <div class="summary-cell">
+      <span class="cell-key">Total replacements</span>
+      <span class="cell-val"><b class="big" id="sum-total">0</b> <span class="muted">entities masked</span></span>
+    </div>
+    <div class="summary-cell">
+      <span class="cell-key">Images neutralised</span>
+      <span class="cell-val"><b class="big" id="sum-images">0</b> <span class="muted">embedded</span></span>
+    </div>
+  </div>
+
+  <div class="results-grid">
+
+    <!-- Performance metrics -->
+    <div class="col">
+      <h2 class="section-title">Performance Metrics</h2>
+      <div id="metrics-cards" class="metric-grid"></div>
+      <p class="metric-note" id="metric-note"></p>
+    </div>
+
+    <!-- Category breakdown -->
+    <div class="col wide">
+      <h2 class="section-title">Entity Category Breakdown</h2>
+      <div class="table-card">
+        <table class="breakdown">
+          <thead>
+            <tr><th>Entity type</th><th class="num">Count</th><th class="prop">Proportion</th></tr>
+          </thead>
+          <tbody id="breakdown-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <p class="restart"><a class="link" href="/">&larr; Redact another document</a></p>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const jobId = {{ job_id | tojson }};
+const $ = id => document.getElementById(id);
+
+/* Friendly labels + icons for each detector category. */
+const LABELS = {
+  PERSON:      ['Names',          '\u{1F464}'],
+  EMAIL:       ['Emails',         '✉️'],
+  PHONE:       ['Phone Numbers',  '\u{1F4DE}'],
+  COMPANY:     ['Companies',      '\u{1F3E2}'],
+  ADDRESS:     ['Addresses',      '\u{1F4CD}'],
+  SSN:         ['SSNs',           '\u{1F194}'],
+  CREDIT_CARD: ['Credit Cards',   '\u{1F4B3}'],
+  DOB:         ['Dates of Birth', '\u{1F382}'],
+  IP_ADDRESS:  ['IP Addresses',   '\u{1F310}'],
+  PAN:         ['PAN Numbers',    '\u{1F194}'],
+  DIN:         ['Director IDs',   '\u{1F194}'],
+};
+
+const pct = x => (x * 100).toFixed(1) + '%';
+
+function showView(id) {
+  ['processing-view', 'error-view', 'results-view']
+    .forEach(v => $(v).classList.toggle('hidden', v !== id));
+}
+
+function renderBreakdown(counts) {
+  const rows = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const max = rows.length ? rows[0][1] : 1;
+
+  $('breakdown-body').innerHTML = rows.length ? rows.map(([type, count]) => {
+    const [label, icon] = LABELS[type] || [type, '•'];
+    const width = Math.max(4, (count / max) * 100);
+    return `<tr>
+      <td><span class="ent"><span class="ent-ico">${icon}</span>${label}</span></td>
+      <td class="num">${count}</td>
+      <td class="prop"><span class="bar"><span class="bar-fill" style="width:${width}%"></span></span></td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="3" class="empty">No PII detected in this document.</td></tr>`;
+}
+
+function metricCard(icon, value, label) {
+  return `<div class="metric-card">
+    <span class="metric-ico">${icon}</span>
+    <span class="metric-value">${value}</span>
+    <span class="metric-label">${label}</span>
+  </div>`;
+}
+
+function renderMetrics(data) {
+  if (!data.metrics) {
+    /* No ground truth: show the same four cards, but empty rather than
+       invented. Fabricating scores would be worse than showing none. */
+    $('metrics-cards').innerHTML = [
+      metricCard('\u{1F3AF}', '&mdash;', 'Precision'),
+      metricCard('\u{1F50D}', '&mdash;', 'Recall'),
+      metricCard('✅',    '&mdash;', 'Accuracy'),
+      metricCard('\u{1F4CA}', '&mdash;', 'F1 Score'),
+    ].join('');
+    $('metrics-cards').classList.add('unscored');
+    $('metric-note').innerHTML =
+      `<b>Not scored.</b> ${data.metrics_note}
+       <br>Re-run with a ground-truth file to see real numbers here.`;
+    return;
+  }
+
+  const m = data.metrics.overall;
+  $('metrics-cards').innerHTML = [
+    metricCard('\u{1F3AF}', pct(m.precision), 'Precision'),
+    metricCard('\u{1F50D}', pct(m.recall),    'Recall'),
+    metricCard('✅',    pct(m.accuracy),  'Accuracy'),
+    metricCard('\u{1F4CA}', pct(m.f1),        'F1 Score'),
+  ].join('');
+  $('metric-note').innerHTML =
+    `${m.tp} correct &middot; ${m.fp} false positives &middot; ${m.fn} missed.
+     Accuracy is TP / (TP + FP + FN), measured per entity.`;
+}
+
+async function poll() {
+  let data;
+  try {
+    data = await (await fetch(`/api/jobs/${jobId}`)).json();
+  } catch (e) {
+    setTimeout(poll, 2000);
+    return;
+  }
+
+  const percent = data.percent || 0;
+  $('stage-label').textContent = data.stage || data.status;
+  $('stage-pct').textContent = percent + '%';
+  $('progress-fill').style.width = percent + '%';
+
+  /* Opening a large DOCX is one opaque call with no sub-progress, so the bar
+     would otherwise appear frozen. Show a moving stripe until real work
+     starts reporting. */
+  $('progress-fill').classList.toggle('indeterminate', percent <= 3);
+
+  if (data.status === 'error' || data.status === 'cancelled') {
+    $('error-title').textContent =
+      data.status === 'cancelled' ? 'Processing cancelled' : 'Something went wrong';
+    $('error-text').textContent =
+      data.error || 'The job was cancelled before it finished.';
+    $('error-text').classList.toggle('hidden', data.status === 'cancelled');
+    showView('error-view');
+    return;
+  }
+
+  if (data.status === 'done') {
+    $('sum-filename').textContent = data.filename;
+    $('sum-total').textContent = data.summary.total_entities;
+    $('sum-images').textContent =
+      `${data.summary.images_blanked}/${data.summary.images_found}`;
+    renderBreakdown(data.summary.counts_by_type);
+    renderMetrics(data);
+    $('dl-docx').href = `/jobs/${jobId}/download/docx`;
+    $('dl-report').href = `/jobs/${jobId}/download/report`;
+    showView('results-view');
+    return;
+  }
+
+  setTimeout(poll, 700);
+}
+
+$('cancel-btn').addEventListener('click', async () => {
+  $('cancel-btn').textContent = 'Cancelling…';
+  $('cancel-btn').disabled = true;
+  await fetch(`/api/jobs/${jobId}/cancel`, { method: 'POST' });
+});
+
+poll();
+</script>
+{% endblock %}

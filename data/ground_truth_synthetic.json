@@ -1,0 +1,94 @@
+[
+  {
+    "text": "Rashi Patil",
+    "type": "PERSON"
+  },
+  {
+    "text": "rashhi.patil@gmail.com",
+    "type": "EMAIL"
+  },
+  {
+    "text": "+91 9876543210",
+    "type": "PHONE"
+  },
+  {
+    "text": "15 March 1992",
+    "type": "DOB"
+  },
+  {
+    "text": "123-45-6789",
+    "type": "SSN"
+  },
+  {
+    "text": "4111 1111 1111 1111",
+    "type": "CREDIT_CARD"
+  },
+  {
+    "text": "192.168.14.22",
+    "type": "IP_ADDRESS"
+  },
+  {
+    "text": "Acme Manufacturing Limited",
+    "type": "COMPANY"
+  },
+  {
+    "text": "42 Baker Street, Kothrud, Pune - 411 038, Maharashtra, India",
+    "type": "ADDRESS"
+  },
+  {
+    "text": "Rohan Dey",
+    "type": "PERSON"
+  },
+  {
+    "text": "rohan.dey@gmail.com",
+    "type": "EMAIL"
+  },
+  {
+    "text": "Rashi Patil",
+    "type": "PERSON"
+  },
+  {
+    "text": "Rohan Dey",
+    "type": "PERSON"
+  },
+  {
+    "text": "Rahul Sharma",
+    "type": "PERSON"
+  },
+  {
+    "text": "Acme Manufacturing Limited",
+    "type": "COMPANY"
+  },
+  {
+    "text": "Rahul Sharma",
+    "type": "PERSON"
+  },
+  {
+    "text": "Globex Industries Limited",
+    "type": "COMPANY"
+  },
+  {
+    "text": "Priya Nair",
+    "type": "PERSON"
+  },
+  {
+    "text": "priya.nair@example.org",
+    "type": "EMAIL"
+  },
+  {
+    "text": "+91 20 45053237",
+    "type": "PHONE"
+  },
+  {
+    "text": "Arjun Mehta",
+    "type": "PERSON"
+  },
+  {
+    "text": "arjun.mehta@example.org",
+    "type": "EMAIL"
+  },
+  {
+    "text": "+91 22 4009 4400",
+    "type": "PHONE"
+  }
+]
