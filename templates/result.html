@@ -73,7 +73,9 @@
     </div>
     <div class="summary-cell">
       <span class="cell-key">Total replacements</span>
-      <span class="cell-val"><b class="big" id="sum-total">0</b> <span class="muted">entities masked</span></span>
+      {# Backend counts every replaced span, not distinct entities, so the
+         label says "occurrences" rather than implying a unique count. #}
+      <span class="cell-val"><b class="big" id="sum-total">0</b> <span class="muted">occurrences replaced</span></span>
     </div>
     <div class="summary-cell">
       <span class="cell-key">Images neutralised</span>
@@ -170,8 +172,11 @@ function renderMetrics(data) {
     ].join('');
     $('metrics-cards').classList.add('unscored');
     $('metric-note').innerHTML =
-      `<b>Not scored.</b> ${data.metrics_note}
-       <br>Re-run with a ground-truth file to see real numbers here.`;
+      `<b>Not evaluated.</b> Ground truth is required to calculate precision,
+       recall, accuracy and F1 &mdash; there is nothing to compare the
+       detections against.
+       <br>This is expected, not an error. Upload a ground-truth file with the
+       document to see scored results.`;
     return;
   }
 

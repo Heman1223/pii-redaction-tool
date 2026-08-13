@@ -18,6 +18,12 @@
   --ok-soft:    #ecfdf3;
   --danger:     #b42318;
 
+  /* Shell is the outer page width; column is the upload flow inside it.
+     Sized so a 1366px laptop uses ~85% and a 1920px display ~65%,
+     rather than a narrow strip floating in whitespace. */
+  --shell:      1180px;
+  --column:     880px;
+
   --radius:     14px;
   --radius-sm:  10px;
   --shadow:     0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.06);
@@ -46,7 +52,7 @@ body {
   position: sticky; top: 0; z-index: 20;
 }
 .topbar-inner {
-  max-width: 1080px; margin: 0 auto; padding: .85rem 1.25rem;
+  max-width: var(--shell); margin: 0 auto; padding: .85rem 1.5rem;
   display: flex; align-items: center; justify-content: space-between;
 }
 .brand {
@@ -67,16 +73,20 @@ body {
 
 .page {
   flex: 1;
-  width: 100%; max-width: 1080px;
-  margin: 0 auto; padding: 2.5rem 1.25rem 3.5rem;
+  width: 100%; max-width: var(--shell);
+  margin: 0 auto; padding: 2.5rem 1.5rem 3.5rem;
 }
-.stack-center { max-width: 620px; margin: 0 auto; }
+.stack-center { max-width: var(--column); margin: 0 auto; }
 
 .page-head { text-align: center; margin-bottom: 1.5rem; }
 h1 { margin: 0 0 .3rem; font-size: 1.6rem; letter-spacing: -.025em; }
 h2 { margin: 0; font-size: 1rem; letter-spacing: -.01em; }
 .lede { margin: 0; color: var(--ink-soft); font-size: .92rem; }
 .accent { color: var(--brand); font-weight: 600; }
+.lede-sub {
+  margin: .45rem auto 0; max-width: 56ch;
+  font-size: .83rem; line-height: 1.5; color: var(--muted);
+}
 
 /* ----------------------------------------------------------------- panel */
 
@@ -167,8 +177,17 @@ code { background: var(--line-soft); padding: .08em .35em; border-radius: 4px; f
 .panel-foot {
   margin-top: 1.35rem; padding-top: 1.1rem;
   border-top: 1px solid var(--line-soft);
-  display: flex; justify-content: flex-end;
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 1.5rem; flex-wrap: wrap;
 }
+
+/* Secondary notes: present, readable, but clearly below the CTA. */
+.foot-notes { display: flex; flex-direction: column; gap: .35rem; max-width: 62%; }
+.note-line {
+  display: flex; align-items: flex-start; gap: .4rem;
+  font-size: .76rem; line-height: 1.45; color: var(--muted);
+}
+.note-ico { width: 13px; height: 13px; fill: currentColor; flex: none; margin-top: .18rem; }
 
 .btn {
   display: inline-flex; align-items: center; gap: .5rem;
@@ -323,7 +342,7 @@ table.breakdown { width: 100%; border-collapse: collapse; font-size: .89rem; }
 .capabilities { margin-top: 1.75rem; }
 .cap-grid {
   list-style: none; margin: .85rem 0 0; padding: 0;
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: .6rem;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem;
 }
 .cap-grid li {
   background: var(--surface); border: 1px solid var(--line);
@@ -338,7 +357,7 @@ table.breakdown { width: 100%; border-collapse: collapse; font-size: .89rem; }
 
 .footer { border-top: 1px solid var(--line); background: var(--surface); }
 .footer-inner {
-  max-width: 1080px; margin: 0 auto; padding: 1rem 1.25rem;
+  max-width: var(--shell); margin: 0 auto; padding: 1rem 1.5rem;
   display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
   font-size: .78rem; color: var(--muted);
 }
@@ -347,12 +366,20 @@ table.breakdown { width: 100%; border-collapse: collapse; font-size: .89rem; }
 
 /* ------------------------------------------------------------ responsive */
 
+@media (max-width: 980px) {
+  .cap-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
 @media (max-width: 820px) {
   .results-grid { grid-template-columns: 1fr; }
   .results-head { flex-direction: column; }
+  .foot-notes { max-width: 100%; }
+  .panel-foot { flex-direction: column; align-items: stretch; }
+  .panel-foot .btn { justify-content: center; }
 }
 @media (max-width: 520px) {
   .page { padding: 1.75rem 1rem 2.5rem; }
+  .cap-grid { grid-template-columns: 1fr; }
   .metric-grid { grid-template-columns: 1fr 1fr; }
   .breakdown .prop { display: none; }
 }

@@ -13,6 +13,7 @@ here needs to outlive the process: a job is a temporary artefact of one upload.
 import os
 import shutil
 import threading
+import time
 import traceback
 import uuid
 from datetime import datetime
@@ -44,6 +45,18 @@ DOCX_SUFFIXES = {".docx"}
 #
 # Raise this when running locally or on an instance with more memory.
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_MB", "8")) * 1024 * 1024
+MAX_UPLOAD_MB = MAX_UPLOAD_BYTES // (1024 * 1024)
+
+# The UI reads these from the backend rather than hardcoding them, so the
+# limit and format list on screen can never drift from what is enforced.
+ACCEPT_ATTR = ",".join(sorted(DOCX_SUFFIXES | TEXT_SUFFIXES))
+DISPLAY_FORMATS = "DOCX, TXT, MD, CSV"
+
+# How long a finished job's files stay on disk. Uploads may contain exactly the
+# personal data this tool exists to remove, so they are not kept indefinitely -
+# and this is what makes the retention note in the UI a true statement rather
+# than a marketing claim.
+JOB_RETENTION_SECONDS = 60 * 60
 
 app = FastAPI(title="SecureRedact")
 app.mount("/static", StaticFiles(directory=str(ROOT / "static")), name="static")
@@ -172,6 +185,29 @@ def _build_report(job_id: str, result, gt_path: Optional[Path]) -> str:
     return "\n".join(lines)
 
 
+def _purge_expired_jobs() -> None:
+    """Delete job directories older than the retention window.
+
+    Called when a new job starts, which is frequent enough for a single-user
+    review tool and avoids running a scheduler for one housekeeping task.
+    Failures are ignored deliberately: a file that cannot be removed must not
+    stop someone from redacting a document.
+    """
+    cutoff = time.time() - JOB_RETENTION_SECONDS
+
+    if not JOBS_DIR.exists():
+        return
+
+    for entry in JOBS_DIR.iterdir():
+        try:
+            if entry.is_dir() and entry.stat().st_mtime < cutoff:
+                shutil.rmtree(entry, ignore_errors=True)
+                with _LOCK:
+                    JOBS.pop(entry.name, None)
+        except OSError:
+            continue
+
+
 def _save_within_limit(source, destination: Path) -> None:
     """Stream an upload to disk, aborting as soon as it exceeds the limit.
 
@@ -224,7 +260,16 @@ def _start_job(job_dir: Path, docx_path: Path, display_name: str,
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
-    return TEMPLATES.TemplateResponse("index.html", {"request": request})
+    return TEMPLATES.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "max_upload_mb": MAX_UPLOAD_MB,
+            "accept_attr": ACCEPT_ATTR,
+            "display_formats": DISPLAY_FORMATS,
+            "retention_hours": JOB_RETENTION_SECONDS // 3600,
+        },
+    )
 
 
 @app.post("/redact")
@@ -234,6 +279,8 @@ async def start_redaction(
     ground_truth: Optional[UploadFile] = File(None),
 ):
     """Accept a file upload or pasted text and start a background job."""
+    _purge_expired_jobs()
+
     job_dir = JOBS_DIR / uuid.uuid4().hex[:12]
     job_dir.mkdir(parents=True, exist_ok=True)
 

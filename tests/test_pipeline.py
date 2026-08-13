@@ -226,3 +226,59 @@ def test_wrong_type_is_not_a_match():
     report = evaluate([("Acme Ltd", "PERSON")], [("Acme Ltd", "COMPANY")])
     assert report.overall.tp == 0
     assert report.overall.fp == 1 and report.overall.fn == 1
+
+
+# ---------------------------------------------------------------------------
+# Web app: retention and UI/backend consistency
+# ---------------------------------------------------------------------------
+
+
+def test_expired_job_directories_are_purged(tmp_path, monkeypatch):
+    """Uploads must not linger, since they hold the PII being redacted.
+
+    This is what makes the retention note shown in the UI a true statement
+    rather than a marketing claim.
+    """
+    import os, time as _time
+    from src import app as webapp
+
+    monkeypatch.setattr(webapp, "JOBS_DIR", tmp_path)
+    monkeypatch.setattr(webapp, "JOB_RETENTION_SECONDS", 3600)
+
+    old = tmp_path / "oldjob"
+    old.mkdir()
+    (old / "secret.docx").write_bytes(b"PK")
+    # Backdate it well past the retention window.
+    stale = _time.time() - 7200
+    os.utime(old, (stale, stale))
+
+    fresh = tmp_path / "freshjob"
+    fresh.mkdir()
+    (fresh / "secret.docx").write_bytes(b"PK")
+
+    webapp._purge_expired_jobs()
+
+    assert not old.exists(), "expired job files must be deleted"
+    assert fresh.exists(), "a recent job must be kept so its download still works"
+
+
+def test_ui_does_not_hardcode_the_upload_limit():
+    """The landing page must render the backend's real limit.
+
+    A hardcoded number silently becomes a lie the moment the backend changes,
+    promising a size the server will reject.
+    """
+    from pathlib import Path
+
+    template = Path("templates/index.html").read_text(encoding="utf-8")
+    assert "{{ max_upload_mb }}" in template
+    assert "{{ accept_attr }}" in template
+    assert "50 MB" not in template and "50&nbsp;MB" not in template
+
+
+def test_accepted_formats_match_the_backend():
+    """Every format offered in the file picker must actually be processed."""
+    from src.app import ACCEPT_ATTR, DOCX_SUFFIXES, TEXT_SUFFIXES
+
+    offered = set(ACCEPT_ATTR.split(","))
+    assert offered == DOCX_SUFFIXES | TEXT_SUFFIXES
