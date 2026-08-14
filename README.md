@@ -343,7 +343,7 @@ only by a bare brand word — `Trilegal` — is missed.
 Requires Python 3.9+.
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/Heman1223/pii-redaction-tool
 cd pii-redaction-tool
 
 python -m venv .venv
@@ -432,12 +432,3 @@ Telephone: +91 9000000002; E-mail: aryan.maharaj@example.com
 5. **More formats** — PDF, XLSX, plain text.
 6. **Expanded ground truth** covering more sections, for tighter metrics.
 7. **Packaging** as `pip install pii-redactor` with a console entry point.
-
----
-
-### A note on the sample data
-
-The reference prospectus contains real people's names, home addresses, direct
-phone numbers and a photographed PAN card. It is excluded by `.gitignore` and
-must never be committed or published. Every example in this README uses either
-the synthetic fixture or already-redacted output.
