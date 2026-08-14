@@ -6,8 +6,6 @@ well the detection actually performed.
 
 ---
 
-## The short version
-
 **Approach.** A hybrid detector. Deterministic **regex** handles anything with a
 fixed shape — emails, phones, SSNs, credit cards (Luhn-validated), IPs, PAN,
 DIN. **spaCy NER** (`en_core_web_sm`) handles names and organisations, which
