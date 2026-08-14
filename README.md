@@ -432,3 +432,5 @@ Telephone: +91 9000000002; E-mail: aryan.maharaj@example.com
 5. **More formats** — PDF, XLSX, plain text.
 6. **Expanded ground truth** covering more sections, for tighter metrics.
 7. **Packaging** as `pip install pii-redactor` with a console entry point.
+
+Deployed Link: https://secureredact.onrender.com/
