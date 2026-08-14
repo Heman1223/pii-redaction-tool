@@ -1,16 +1,24 @@
-# Evaluation Strategy and Metrics
+# PII Redaction Tool — Evaluation Strategy and Report
 
 How this PII redaction tool is measured, why it is measured that way, and what
 the numbers do and do not prove.
 
-Every figure in this document is produced by running the pipeline:
+### Report details
 
-```bash
-python scripts/run_evaluation.py     # rewrites EVALUATION_REPORT.md
-```
+| | |
+|---|---|
+| **System under test** | PII Redaction Tool (hybrid regex + spaCy NER) |
+| **Primary corpus** | Red Herring Prospectus (`.docx`, 4,686 paragraphs and table cells) |
+| **Secondary corpora** | Synthetic fixture (19 entities); negative control (11 distractor lines) |
+| **Detection model** | spaCy `en_core_web_sm` v3.8 + deterministic rules |
+| **Evaluation unit** | One unique entity |
+| **Metrics reported** | Precision, Recall, F1, Accuracy (defined in §3) |
+| **Regression suite** | 104 automated tests, all passing |
+| **Reproduced by** | `python scripts/run_evaluation.py` |
 
-Nothing is hand-entered. Fake values are generated from a fixed seed, so runs
-are reproducible.
+Every figure in this document is produced by running the pipeline. Nothing is
+hand-entered, and fake values are generated from a fixed seed, so a re-run
+reproduces these numbers exactly.
 
 ---
 
@@ -30,7 +38,7 @@ Two supporting runs:
 - **Synthetic fixture** — all nine required PII types: 1.00 across the board (19 entities).
 - **Negative control** — 11 lines of PII-shaped non-PII: **0 detections, 0 characters altered.**
 
-Section 6 names and explains every one of the 6 errors.
+Section 6 names and explains every one of the 6 errors individually.
 
 ---
 
@@ -87,6 +95,20 @@ F1        = 2 · precision · recall / (precision + recall)
 ```
 
 Accuracy is always the most pessimistic of the four here. That is intended.
+
+### What TP, FP and FN mean for redaction
+
+| Term | Meaning in this system | Consequence if it happens |
+|---|---|---|
+| **True positive (TP)** | Annotated PII that the tool detected and replaced | Correct — the data is protected |
+| **False positive (FP)** | Text the tool replaced that is **not** PII | Over-redaction: a non-sensitive word is destroyed, the document degrades |
+| **False negative (FN)** | Annotated PII the tool **failed** to detect | **Data leak** — real personal data survives into the "redacted" output |
+| True negative (TN) | Non-PII text correctly left alone | Not counted; see above for why |
+
+**These two errors are not equally bad.** A false positive damages readability;
+a false negative defeats the entire purpose of the tool. Recall is therefore the
+number to scrutinise first, and it is the weaker of this system's two headline
+figures (0.93 against precision 0.97).
 
 ---
 
@@ -191,10 +213,24 @@ Document-wide detection volume (all 4,686 units, unscored):
 
 ### 5.2 Synthetic fixture — all nine required types
 
-37 units, 23 occurrences replaced, 19 unique entities. Precision, recall, F1 and
-accuracy are **1.00** for ADDRESS, COMPANY, CREDIT_CARD, DOB, EMAIL,
-IP_ADDRESS, PERSON, PHONE and SSN. See Section 4.2 for why this is a plumbing
-check rather than a quality claim.
+37 units, 23 occurrences replaced, 19 unique entities.
+
+| PII Type | Precision | Recall | F1 | Accuracy | TP | FP | FN | Support |
+|---|---|---|---|---|---|---|---|---|
+| PERSON | 1.00 | 1.00 | 1.00 | 1.00 | 5 | 0 | 0 | 5 |
+| EMAIL | 1.00 | 1.00 | 1.00 | 1.00 | 4 | 0 | 0 | 4 |
+| PHONE | 1.00 | 1.00 | 1.00 | 1.00 | 3 | 0 | 0 | 3 |
+| COMPANY | 1.00 | 1.00 | 1.00 | 1.00 | 2 | 0 | 0 | 2 |
+| ADDRESS | 1.00 | 1.00 | 1.00 | 1.00 | 1 | 0 | 0 | 1 |
+| SSN | 1.00 | 1.00 | 1.00 | 1.00 | 1 | 0 | 0 | 1 |
+| CREDIT_CARD | 1.00 | 1.00 | 1.00 | 1.00 | 1 | 0 | 0 | 1 |
+| DOB | 1.00 | 1.00 | 1.00 | 1.00 | 1 | 0 | 0 | 1 |
+| IP_ADDRESS | 1.00 | 1.00 | 1.00 | 1.00 | 1 | 0 | 0 | 1 |
+| **OVERALL** | **1.00** | **1.00** | **1.00** | **1.00** | **19** | **0** | **0** | **19** |
+
+This is the only corpus where all nine required types appear, which is why it
+exists. See Section 4.2 for why a perfect score here is a plumbing check rather
+than a quality claim.
 
 ### 5.3 Negative control — precision under pressure
 
@@ -219,6 +255,53 @@ Amount: 45,000 paid on 13 August 2026
 This is the single most informative precision measurement in the project. The
 reference document contains 270 ordinary dates and zero text-layer dates of
 birth; an ungated date rule alone would have produced ~270 false positives.
+
+---
+
+### 5.4 Sample output from an actual run
+
+
+Verbatim before/after from the synthetic corpus, showing all nine PII types
+replaced with type-compatible values. The synthetic corpus is used here rather
+than the prospectus so that no real personal data is reproduced in this report.
+
+**Redacted:**
+
+| Before | After |
+|---|---|
+| `Full Name: Rashi Patil` | `Full Name: Aryan Maharaj` |
+| `Email: rashhi.patil@gmail.com` | `Email: aryan.maharaj@example.com` |
+| `Contact: +91 9876543210` | `Contact: +91 9000000001` |
+| `Date of Birth: 15 March 1992` | `Date of Birth: 02 January 1990` |
+| `SSN: 123-45-6789` | `SSN: 101-11-1001` |
+| `Card on file: 4111 1111 1111 1111` | `Card on file: 4111-1111-1111-1111` |
+| `Last login from IP 192.168.14.22` | `Last login from IP 192.0.2.2` |
+| `Employer: Acme Manufacturing Limited` | `Employer: Konda Industries Limited` |
+| `Residence: 42 Baker Street, Kothrud, Pune - 411 038, Maharashtra, India` | `Residence: 101 Example Street, Sector 2, Exampleton - 411 001, Example State, India` |
+| `Reporting Manager: Rohan Dey` | `Reporting Manager: Liam Chaudry` |
+| `Manager email: rohan.dey@gmail.com` | `Manager email: liam.chaudry@example.com` |
+
+Two properties visible in this sample:
+
+- **Type compatibility** — an email is replaced by something shaped like an
+  email, a card by a Luhn-valid test card, an IP by an address from the RFC 5737
+  documentation range.
+- **Linked identity** — `Rashi Patil` becomes `Aryan Maharaj`, and her email
+  becomes `aryan.maharaj@example.com`. The person and their email stay
+  consistent with each other, and both remain stable everywhere they recur.
+
+**Left untouched in the same document** — every one of these contains digits and
+resembles PII, and none was altered:
+
+```
+Invoice number 456-78-9012 was raised for this onboarding.
+Reference ticket ID 998877665544332211 remains open.
+Software build version 10.2.14.3 was deployed to production.
+The policy was approved by the board on December 10, 2025.
+Corporate Identity Number: U28129PN1979PLC141032
+SEBI Registration Number: INM000013004
+Total shares allotted: 26704570 at face value 5 each.
+```
 
 ---
 
