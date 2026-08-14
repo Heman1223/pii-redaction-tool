@@ -38,6 +38,52 @@ def test_case_and_spacing_variants_share_one_value():
     )
 
 
+def test_phone_formats_share_one_fake_identity():
+    """The same number written two ways must redact to one fake number.
+
+    A document prints a number as "+91 98765 43210" in a contact block and
+    "+91-9876543210" in a footer. Separators are cosmetic, so both mentions are
+    one phone number and must receive one fake identity - otherwise the
+    redacted document invents a second contact that never existed.
+
+    Regression: identity was previously keyed on whitespace/case normalisation,
+    which leaves separators intact, so the two spellings produced two fakes.
+    """
+    mapping = ReplacementMap(seed=42)
+    spaced = mapping.get("PHONE", "+91 98765 43210")
+    dashed = mapping.get("PHONE", "+91-9876543210")
+    assert spaced == dashed
+
+
+def test_phone_identity_ignores_all_separator_styles():
+    """Every separator style of one number collapses to a single identity."""
+    mapping = ReplacementMap(seed=42)
+    variants = [
+        "+91 98765 43210",
+        "+91-9876543210",
+        "+91 9876543210",
+        "+91-98765-43210",
+        "+91  98765  43210",
+    ]
+    assert len({mapping.get("PHONE", v) for v in variants}) == 1
+
+
+def test_distinct_phone_numbers_still_differ():
+    """Canonicalisation must not collapse two genuinely different numbers."""
+    mapping = ReplacementMap(seed=42)
+    assert mapping.get("PHONE", "+91 98765 43210") != mapping.get(
+        "PHONE", "+91 22 4009 4400"
+    )
+
+
+def test_mapping_report_shows_the_original_spelling():
+    """The canonical key is digits; the report must stay human-readable."""
+    mapping = ReplacementMap(seed=42)
+    mapping.get("PHONE", "+91 98765 43210")
+    keys = list(mapping.as_dict())
+    assert any("+91 98765 43210" in k for k in keys), keys
+
+
 def test_different_entities_get_different_values():
     mapping = ReplacementMap(seed=1)
     assert mapping.get("PERSON", "Rashi Patil") != mapping.get("PERSON", "Rohan Dey")

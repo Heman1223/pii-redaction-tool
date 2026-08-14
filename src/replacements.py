@@ -45,6 +45,10 @@ class ReplacementMap:
         # so "rajesh.hegde@ksh.com" becomes "john.doe@example.com".
         self._person_names: Dict[str, str] = {}
         self._counters: Dict[str, int] = {}
+        # First spelling seen for each key. The key itself is canonical - for
+        # phones that is a bare digit string - so this keeps the mapping report
+        # readable ("+91 98765 43210" rather than "919876543210").
+        self._first_seen: Dict[Tuple[str, str, str], str] = {}
 
     # -- key construction ---------------------------------------------------
 
@@ -57,6 +61,27 @@ class ReplacementMap:
         """
         return normalise_entity_text(text)
 
+    @staticmethod
+    def _canonical(entity_type: str, text: str) -> str:
+        """Reduce a mention to the form that decides entity identity.
+
+        Two mentions are "the same entity" when their canonical forms match, so
+        this is what controls whether they share a fake value.
+
+        Phone numbers need more than whitespace and case folding, because their
+        separators are purely cosmetic. A document may print one number as
+        "+91 98765 43210" in a contact block and "+91-9876543210" in a footer;
+        those are one number and must receive one fake identity. Comparing on
+        digits alone makes the formatting irrelevant.
+
+        The evaluator already compared phones digit-wise, so before this the two
+        layers disagreed: scoring treated the spellings as one number while the
+        replacement map issued two different fakes.
+        """
+        if entity_type == "PHONE":
+            return re.sub(r"[^\d]", "", text)
+        return ReplacementMap._normalise(text)
+
     def _key(self, entity_type: str, text: str, context: Optional[str]) -> Tuple[str, str, str]:
         """Build the identity key for an entity.
 
@@ -68,7 +93,7 @@ class ReplacementMap:
         same name AND the same role are still merged - documented as a known
         limitation in the README rather than papered over.
         """
-        base = self._normalise(text)
+        base = self._canonical(entity_type, text)
         if entity_type == "PERSON" and context:
             return (entity_type, base, context)
         return (entity_type, base, "")
@@ -148,16 +173,23 @@ class ReplacementMap:
         if key not in self._map:
             fake = self._generate(entity_type, text)
             self._map[key] = fake
+            self._first_seen[key] = text.strip()
             if entity_type == "PERSON":
                 self._person_names[self._normalise(text)] = fake
 
         return self._map[key]
 
     def as_dict(self) -> Dict[str, str]:
-        """Flatten to {original: fake} for reporting and debugging."""
+        """Flatten to {original: fake} for reporting and debugging.
+
+        Reported against the first spelling encountered, not the canonical key,
+        so a phone entry reads "+91 98765 43210" rather than "919876543210".
+        """
         return {
-            f"{etype}:{text}" + (f" [{ctx}]" if ctx else ""): fake
-            for (etype, text, ctx), fake in self._map.items()
+            f"{etype}:{self._first_seen.get(key, text)}"
+            + (f" [{ctx}]" if ctx else ""): fake
+            for key, fake in self._map.items()
+            for etype, text, ctx in [key]
         }
 
     def __len__(self) -> int:
